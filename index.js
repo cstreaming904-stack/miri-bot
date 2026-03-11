@@ -33,7 +33,7 @@ async function startBot() {
 
   const phoneNumber = "529811968561"
 
-  if (!sock.authState.creds.registered) {
+  if (!state.creds.registered) {
     const code = await sock.requestPairingCode(phoneNumber)
     console.log("Código de vinculación:", code)
   }
