@@ -8,7 +8,7 @@ const {
 } = require("@whiskeysockets/baileys")
 
 const app = express()
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 10000
 
 app.get("/", (req, res) => {
   res.send("Miri Bot está funcionando 🤖")
@@ -19,24 +19,27 @@ app.listen(PORT, () => {
 })
 
 async function startBot() {
+
   const { state, saveCreds } = await useMultiFileAuthState("session")
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
     version,
     logger: pino({ level: "silent" }),
-    auth: state,
-    printQRInTerminal: true
+    auth: state
   })
 
   sock.ev.on("creds.update", saveCreds)
 
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect, qr } = update
+  const phoneNumber = "529811968561"
 
-    if (qr) {
-      console.log("QR generado, revisa los logs.")
-    }
+  if (!sock.authState.creds.registered) {
+    const code = await sock.requestPairingCode(phoneNumber)
+    console.log("Código de vinculación:", code)
+  }
+
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect } = update
 
     if (connection === "open") {
       console.log("WhatsApp conectado correctamente ✅")
@@ -45,8 +48,6 @@ async function startBot() {
     if (connection === "close") {
       const shouldReconnect =
         lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
-
-      console.log("Conexión cerrada. Reconectando:", shouldReconnect)
 
       if (shouldReconnect) {
         startBot()
@@ -59,6 +60,7 @@ async function startBot() {
     if (!msg.message) return
 
     const from = msg.key.remoteJid
+
     const text =
       msg.message.conversation ||
       msg.message.extendedTextMessage?.text ||
@@ -78,4 +80,4 @@ async function startBot() {
   })
 }
 
-startBot().catch(err => console.error("Error iniciando bot:", err))
+startBot().catch(err => console.log(err))
