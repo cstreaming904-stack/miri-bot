@@ -1,37 +1,81 @@
 const express = require("express")
-const makeWASocket = require("@whiskeysockets/baileys").default
+const pino = require("pino")
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason
+} = require("@whiskeysockets/baileys")
 
 const app = express()
+const PORT = process.env.PORT || 3000
 
 app.get("/", (req, res) => {
   res.send("Miri Bot está funcionando 🤖")
 })
 
-app.listen(3000, () => {
-  console.log("Servidor iniciado en puerto 3000")
+app.listen(PORT, () => {
+  console.log(`Servidor iniciado en puerto ${PORT}`)
 })
 
 async function startBot() {
-  const sock = makeWASocket({ printQRInTerminal: true })
+  const { state, saveCreds } = await useMultiFileAuthState("session")
+  const { version } = await fetchLatestBaileysVersion()
 
-  sock.ev.on("messages.upsert", async (msg) => {
-    const message = msg.messages[0]
-    if (!message.message) return
+  const sock = makeWASocket({
+    version,
+    logger: pino({ level: "silent" }),
+    auth: state,
+    printQRInTerminal: true
+  })
 
-    const text = message.message.conversation
+  sock.ev.on("creds.update", saveCreds)
+
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect, qr } = update
+
+    if (qr) {
+      console.log("QR generado, revisa los logs.")
+    }
+
+    if (connection === "open") {
+      console.log("WhatsApp conectado correctamente ✅")
+    }
+
+    if (connection === "close") {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+
+      console.log("Conexión cerrada. Reconectando:", shouldReconnect)
+
+      if (shouldReconnect) {
+        startBot()
+      }
+    }
+  })
+
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    const msg = messages[0]
+    if (!msg.message) return
+
+    const from = msg.key.remoteJid
+    const text =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      ""
 
     if (text === "!menu") {
-      await sock.sendMessage(message.key.remoteJid, {
+      await sock.sendMessage(from, {
         text: "🤖 *Miri Bot*\n\nComandos:\n!menu\n!hola"
       })
     }
 
     if (text === "!hola") {
-      await sock.sendMessage(message.key.remoteJid, {
+      await sock.sendMessage(from, {
         text: "Hola 👋 soy Miri Bot"
       })
     }
   })
 }
 
-startBot()
+startBot().catch(err => console.error("Error iniciando bot:", err))
