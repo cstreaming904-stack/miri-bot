@@ -1,33 +1,10 @@
-const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
+const express = require("express")
+const app = express()
 
-async function startBot() {
-const { state, saveCreds } = await useMultiFileAuthState("session")
-
-const sock = makeWASocket({
-auth: state
+app.get("/", (req, res) => {
+  res.send("Miri Bot está funcionando 🤖")
 })
 
-sock.ev.on("creds.update", saveCreds)
-
-sock.ev.on("messages.upsert", async ({ messages }) => {
-const msg = messages[0]
-if (!msg.message) return
-
-const text = msg.message.conversation || msg.message.extendedTextMessage?.text
-const from = msg.key.remoteJid
-
-if (!text) return
-
-if (text === ".menu") {
-await sock.sendMessage(from, { text: "🌸 Hola soy Miri Boni Bot 🌸\n\nUsa .ping para probar el bot" })
-}
-
-if (text === ".ping") {
-await sock.sendMessage(from, { text: "🏓 Pong! Bot funcionando correctamente" })
-}
-
+app.listen(3000, () => {
+  console.log("Servidor iniciado en puerto 3000")
 })
-
-}
-
-startBot()
