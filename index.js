@@ -20,24 +20,32 @@ console.log(`Servidor iniciado en puerto ${PORT}`)
 
 async function startBot() {
 
-const { state, saveCreds } = await useMultiFileAuthState("session2")
+const { state, saveCreds } = await useMultiFileAuthState("session_miri")
 
 const { version } = await fetchLatestBaileysVersion()
 
 const sock = makeWASocket({
 version,
 logger: pino({ level: "silent" }),
-auth: state
+auth: state,
+printQRInTerminal: false
 })
 
 sock.ev.on("creds.update", saveCreds)
 
 const phoneNumber = "529811968561"
 
+setTimeout(async () => {
+
 if (!sock.authState.creds.registered) {
+
 const code = await sock.requestPairingCode(phoneNumber)
-console.log("Código de vinculación:", code)
+
+console.log("CÓDIGO DE VINCULACIÓN:", code)
+
 }
+
+}, 5000)
 
 sock.ev.on("connection.update", (update) => {
 
@@ -76,7 +84,7 @@ msg.message.extendedTextMessage?.text ||
 if (text === "menu") {
 
 await sock.sendMessage(from, {
-text: "🤖 Miri Bot\n\nComandos:\nmenu\nhola"
+text: "🤖 *Miri Bot*\n\nComandos:\nmenu\nhola"
 })
 
 }
@@ -84,7 +92,7 @@ text: "🤖 Miri Bot\n\nComandos:\nmenu\nhola"
 if (text === "hola") {
 
 await sock.sendMessage(from, {
-text: "Hola 👋 soy Miri Bot"
+text: "Hola 👋 soy *Miri Bot*"
 })
 
 }
