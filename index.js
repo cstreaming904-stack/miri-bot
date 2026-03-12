@@ -9,8 +9,7 @@ const {
 
 const app = express()
 const PORT = process.env.PORT || 10000
-const phoneNumber = "529811968561" // sin + y sin espacios
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+const phoneNumber = "529811968561"
 
 app.get("/", (req, res) => {
   res.send("Miri Bot está funcionando 🤖")
@@ -20,51 +19,18 @@ app.listen(PORT, () => {
   console.log(`Servidor iniciado en puerto ${PORT}`)
 })
 
-async function askAI(prompt) {
-  if (!OPENAI_API_KEY) {
-    return "No encontré la clave OPENAI_API_KEY en Render."
-  }
+function getTextFromMessage(message) {
+  if (!message) return ""
 
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: "Eres Miri Bot, una asistente amable, breve, útil y cariñosa. Responde en español claro. Si te piden avisos para clientes o grupos de WhatsApp, redacta bonito y directo."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 300
-      })
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      console.log("ERROR_OPENAI:", data)
-      return "Hubo un problema al consultar la IA."
-    }
-
-    return data.choices?.[0]?.message?.content?.trim() || "No pude generar respuesta."
-  } catch (error) {
-    console.log("ERROR_ASK_AI:", error)
-    return "Ocurrió un error al hablar con la IA."
-  }
+  if (message.conversation) return message.conversation
+  if (message.extendedTextMessage?.text) return message.extendedTextMessage.text
+  if (message.imageMessage?.caption) return message.imageMessage.caption
+  if (message.videoMessage?.caption) return message.videoMessage.caption
+  return ""
 }
 
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("session_miri_ia")
+  const { state, saveCreds } = await useMultiFileAuthState("session_miri_final")
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
@@ -87,7 +53,7 @@ async function startBot() {
       try {
         await new Promise(r => setTimeout(r, 5000))
         const code = await sock.requestPairingCode(phoneNumber)
-        console.log("CÓDIGO DE VINCULACIÓN:", code)
+        console.log("CODIGO_DE_VINCULACION:", code)
       } catch (e) {
         console.log("ERROR_AL_GENERAR_CODIGO:", e?.message || e)
       }
@@ -100,7 +66,6 @@ async function startBot() {
     if (connection === "close") {
       const statusCode = lastDisconnect?.error?.output?.statusCode
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
-
       console.log("CONEXION_CERRADA:", statusCode || "sin_codigo")
 
       if (shouldReconnect) {
@@ -109,52 +74,40 @@ async function startBot() {
     }
   })
 
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0]
-    if (!msg?.message) return
-    if (msg.key.fromMe) return
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    try {
+      console.log("MENSAJE_RECIBIDO_TIPO:", type)
 
-    const from = msg.key.remoteJid
-    const text =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text ||
-      ""
+      const msg = messages?.[0]
+      if (!msg) return
 
-    const cleanText = text.trim().toLowerCase()
+      const from = msg.key.remoteJid
+      const text = getTextFromMessage(msg.message).trim()
+      const lower = text.toLowerCase()
 
-    if (cleanText === "hola") {
-      await sock.sendMessage(from, {
-        text: "Hola 👋 soy Miri Bot"
-      })
-      return
-    }
+      console.log("FROM:", from)
+      console.log("TEXTO:", text)
 
-    if (cleanText === "menu") {
-      await sock.sendMessage(from, {
-        text: "🤖 *Miri Bot*\n\nComandos:\nmenu\nhola\nmiri <pregunta>"
-      })
-      return
-    }
+      if (!text) return
 
-    if (cleanText.startsWith("miri ")) {
-      const prompt = text.slice(5).trim()
+      if (lower === "hola") {
+        await sock.sendMessage(from, { text: "Hola 👋 soy Miri Bot" })
+        return
+      }
 
-      if (!prompt) {
+      if (lower === "menu") {
         await sock.sendMessage(from, {
-          text: "Escríbeme algo así:\n\nmiri haz un aviso para clientes"
+          text: "🤖 *Miri Bot*\n\nComandos disponibles:\n- hola\n- menu\n- ping"
         })
         return
       }
 
-      await sock.sendMessage(from, {
-        text: "Pensando... ✨"
-      })
-
-      const aiReply = await askAI(prompt)
-
-      await sock.sendMessage(from, {
-        text: aiReply
-      })
+      if (lower === "ping") {
+        await sock.sendMessage(from, { text: "pong 🏓" })
+        return
+      }
+    } catch (error) {
+      console.log("ERROR_MESSAGES_UPSERT:", error?.message || error)
     }
   })
 }
